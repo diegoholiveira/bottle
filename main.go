@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+
+	"github.com/diegoholiveira/bottle/server"
 )
 
 func main() {
@@ -10,7 +12,7 @@ func main() {
 
 	flag.Parse()
 
-	server := new(Server)
+	server := new(server.Server)
 	server.Init(*ip, *port)
 	server.Start()
 }

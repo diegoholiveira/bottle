@@ -1,9 +1,11 @@
-package main
+package server
 
 import (
 	"fmt"
 	"net"
 	"os"
+
+	"github.com/diegoholiveira/bottle/command"
 )
 
 type Server struct {
@@ -38,13 +40,34 @@ func (server *Server) Start() {
 			continue
 		}
 
-		server.Handle(conn)
+		handle(conn)
 	}
 }
 
-func (server *Server) Handle(conn net.Conn) {
+func handle(conn net.Conn) {
 	defer conn.Close()
 
-	msg := []byte("Hello from bottle\n")
-	conn.Write(msg)
+	for {
+		comm, err := command.NewCommandFromConnection(conn)
+		if err != nil {
+			conn.Write([]byte(err.Error()))
+			return
+		}
+
+		var msg []byte
+
+		switch comm.Command {
+		default:
+			return
+		case command.Put:
+			msg = []byte("Putting an item...\n")
+		case command.Get:
+			msg = []byte("Getting an item...\n")
+		case command.Use:
+			msg = []byte("Using a queue...\n")
+		case command.Purge:
+			msg = []byte("Purging a queue\n")
+		}
+		conn.Write(msg)
+	}
 }

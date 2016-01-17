@@ -6,10 +6,14 @@ import (
 	"os"
 
 	"github.com/diegoholiveira/bottle/command"
+	"github.com/diegoholiveira/bottle/queue"
 )
+
+type queues map[string]*queue.Queue
 
 type Server struct {
 	address *net.TCPAddr
+	queues  queues
 }
 
 func (server *Server) Init(address string, port int) {
@@ -23,6 +27,8 @@ func (server *Server) Init(address string, port int) {
 		IP:   ip,
 		Port: port,
 	}
+
+	server.queues = make(queues)
 }
 
 func (server *Server) Start() {
@@ -40,12 +46,14 @@ func (server *Server) Start() {
 			continue
 		}
 
-		handle(conn)
+		server.handle(conn)
 	}
 }
 
-func handle(conn net.Conn) {
+func (server *Server) handle(conn net.Conn) {
 	defer conn.Close()
+
+	var q *queue.Queue
 
 	for {
 		comm, err := command.NewCommandFromConnection(conn)
@@ -56,17 +64,41 @@ func handle(conn net.Conn) {
 
 		var msg []byte
 
-		switch comm.Command {
-		default:
+		if comm.Command == command.Quit {
 			return
+		}
+
+		if comm.Command != command.Use && q == nil {
+			msg = []byte("Select a queue first\n")
+			conn.Write(msg)
+
+			continue
+		}
+
+		switch comm.Command {
 		case command.Put:
-			msg = []byte("Putting an item...\n")
+			q.Push(comm.Data)
+			msg = []byte("OK\n")
 		case command.Get:
-			msg = []byte("Getting an item...\n")
+			if q.Len() == 0 {
+				msg = []byte("NULL")
+			} else {
+				item := q.Pop()
+				msg = []byte(item)
+			}
 		case command.Use:
-			msg = []byte("Using a queue...\n")
+			if _, ok := server.queues[comm.Data]; !ok {
+				fmt.Printf("Creating a queue named %s\n", comm.Data)
+
+				server.queues[comm.Data] = queue.New()
+			}
+
+			q = server.queues[comm.Data]
+
+			msg = []byte("OK\n")
 		case command.Purge:
-			msg = []byte("Purging a queue\n")
+			q = queue.New()
+			msg = []byte("OK\n")
 		}
 		conn.Write(msg)
 	}

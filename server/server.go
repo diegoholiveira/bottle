@@ -69,16 +69,16 @@ func (server *Server) handle(conn net.Conn) {
 		}
 
 		if comm.Command != command.Use && q == nil {
-			msg = []byte("Select a queue first\n")
-			conn.Write(msg)
+			conn.Write([]byte("Select a queue first"))
 
 			continue
 		}
 
+		msg = []byte("OK")
+
 		switch comm.Command {
 		case command.Put:
 			q.Push(comm.Data)
-			msg = []byte("OK\n")
 		case command.Get:
 			if q.Len() == 0 {
 				msg = []byte("NULL")
@@ -94,11 +94,8 @@ func (server *Server) handle(conn net.Conn) {
 			}
 
 			q = server.queues[comm.Data]
-
-			msg = []byte("OK\n")
 		case command.Purge:
 			q = queue.New()
-			msg = []byte("OK\n")
 		}
 		conn.Write(msg)
 	}

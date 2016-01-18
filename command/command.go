@@ -40,9 +40,17 @@ func parseCommand(rawCommand string) (*Command, error) {
 
 	switch parsed[0] {
 	case "USE":
+		dataLength := len([]rune(parsed[1]))
+		if dataLength == 0 {
+			return nil, errors.New("The command USE must have an valid queue name")
+		}
 		command.Command = Use
 		command.Data = parsed[1]
 	case "PUT":
+		dataLength := len([]rune(parsed[1]))
+		if dataLength == 0 {
+			return nil, errors.New("The command PUT cannot save an empty item")
+		}
 		command.Command = Put
 		command.Data = parsed[1]
 	case "GET":

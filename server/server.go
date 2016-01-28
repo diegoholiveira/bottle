@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"unicode/utf8"
 
 	"github.com/diegoholiveira/bottle/command"
 	"github.com/diegoholiveira/bottle/queue"
@@ -46,32 +47,29 @@ func (server *Server) Start() {
 			continue
 		}
 
-		server.handle(conn)
+		go server.handle(conn)
 	}
 }
 
 func (server *Server) handle(conn net.Conn) {
-	defer conn.Close()
-
 	var q *queue.Queue
 
 	for {
 		comm, err := command.NewCommandFromConnection(conn)
 		if err != nil {
 			conn.Write([]byte(err.Error()))
-			return
+			break
 		}
 
 		var msg []byte
 
 		if comm.Command == command.Quit {
-			return
+			break
 		}
 
 		if comm.Command != command.Use && q == nil {
 			conn.Write([]byte("Select a queue first"))
-
-			continue
+			break
 		}
 
 		msg = []byte("OK")
@@ -80,11 +78,12 @@ func (server *Server) handle(conn net.Conn) {
 		case command.Put:
 			q.Push(comm.Data)
 		case command.Get:
-			if q.Len() == 0 {
-				msg = []byte("NULL")
-			} else {
-				item := q.Pop()
-				msg = []byte(item)
+			msg = []byte("NULL")
+			if q.Len() > 0 {
+				if item := q.Pop(); utf8.RuneCountInString(item) > 0 {
+					msg = []byte(item)
+
+				}
 			}
 		case command.Use:
 			if _, ok := server.queues[comm.Data]; !ok {
@@ -99,4 +98,6 @@ func (server *Server) handle(conn net.Conn) {
 		}
 		conn.Write(msg)
 	}
+
+	conn.Close()
 }

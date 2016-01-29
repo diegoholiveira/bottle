@@ -55,7 +55,7 @@ class Bottle(object):
 conn = Bottle()
 
 conn.use("emails")
-for v in range(1, 999999):
+for v in range(1, 99999):
     conn.put("mensagem de teste {}".format(v))
 
 while True:

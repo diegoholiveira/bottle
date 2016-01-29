@@ -47,11 +47,13 @@ func (server *Server) Start() {
 			continue
 		}
 
-		go server.handle(conn)
+		go handle(server, conn)
 	}
 }
 
-func (server *Server) handle(conn net.Conn) {
+func handle(server *Server, conn net.Conn) {
+	defer conn.Close()
+
 	var q *queue.Queue
 
 	for {
@@ -76,8 +78,11 @@ func (server *Server) handle(conn net.Conn) {
 
 		switch comm.Command {
 		case command.Put:
+			q.Lock()
 			q.Push(comm.Data)
+			q.Unlock()
 		case command.Get:
+			q.Lock()
 			msg = []byte("NULL")
 			if q.Len() > 0 {
 				if item := q.Pop(); utf8.RuneCountInString(item) > 0 {
@@ -85,6 +90,7 @@ func (server *Server) handle(conn net.Conn) {
 
 				}
 			}
+			q.Unlock()
 		case command.Use:
 			if _, ok := server.queues[comm.Data]; !ok {
 				fmt.Printf("Creating a queue named %s\n", comm.Data)
@@ -94,10 +100,9 @@ func (server *Server) handle(conn net.Conn) {
 
 			q = server.queues[comm.Data]
 		case command.Purge:
+			// TODO: implement it in a way that we can lock it!
 			q = queue.New()
 		}
 		conn.Write(msg)
 	}
-
-	conn.Close()
 }

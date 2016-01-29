@@ -1,22 +1,31 @@
 package queue
 
-type Queue []string
+import (
+	"sync"
+)
+
+type Queue struct {
+	sync.Mutex
+	data *[]string
+}
 
 func (q *Queue) Len() int {
-	return len(*q)
+	return len(*q.data)
 }
 
 func (q *Queue) Push(s string) {
-	*q = append(*q, s)
+	*q.data = append(*q.data, s)
 }
 
 func (q *Queue) Pop() string {
-	n := (*q)[0]
-	*q = (*q)[1:]
+	n := (*q.data)[0]
+	*q.data = (*q.data)[1:]
 	return n
 }
 
 func New() *Queue {
-	q := new(Queue)
+	q := &Queue{
+		data: new([]string),
+	}
 	return q
 }

@@ -1,9 +1,11 @@
 package server
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"net"
 	"os"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/diegoholiveira/bottle/command"
@@ -13,46 +15,67 @@ import (
 type queues map[string]*queue.Queue
 
 type Server struct {
-	address *net.TCPAddr
-	queues  queues
+	address   *net.TCPAddr
+	waitGroup *sync.WaitGroup
+	queues    queues
+	listener  *net.TCPListener
 }
 
-func (server *Server) Init(address string, port int) {
+func New(address string, port int) (*Server, error) {
 	ip := net.ParseIP(address)
 	if ip == nil {
-		fmt.Println("You must define a valid IP for bottle")
-		os.Exit(1)
+		return nil, errors.New("You must define a valid IP for Bottle")
 	}
 
-	server.address = &net.TCPAddr{
-		IP:   ip,
-		Port: port,
+	server := &Server{
+		waitGroup: &sync.WaitGroup{},
+		address: &net.TCPAddr{
+			IP:   ip,
+			Port: port,
+		},
+		queues: make(queues),
 	}
 
-	server.queues = make(queues)
+	return server, nil
 }
 
 func (server *Server) Start() {
-	fmt.Printf("Starting bottle at %s\n", server.address.String())
+	log.Printf("Starting bottle at %s\n", server.address.String())
 
 	listener, err := net.ListenTCP("tcp", server.address)
 	if err != nil {
-		fmt.Println("Its not possible to start bottle, please verify", err.Error())
+		log.Println(err.Error())
+		log.Println("It's not possible to start bottle!")
 		os.Exit(1)
 	}
 
+	server.listener = listener
+
 	for {
+		// keep accepting new connections
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
 		}
 
-		go handle(server, conn)
+		log.Println(conn.RemoteAddr(), "connected")
+
+		// adds the new client to the wait group
+		server.waitGroup.Add(1)
+		// handle with the new client connection
+		go server.handle(conn)
 	}
 }
 
-func handle(server *Server, conn net.Conn) {
+func (server *Server) Stop() {
+	log.Println("Stopping the server...")
+	server.listener.Close()
+	server.waitGroup.Wait()
+}
+
+func (server *Server) handle(conn net.Conn) {
 	defer conn.Close()
+	defer server.waitGroup.Done()
 
 	var q *queue.Queue
 
@@ -93,7 +116,7 @@ func handle(server *Server, conn net.Conn) {
 			q.Unlock()
 		case command.Use:
 			if _, ok := server.queues[comm.Data]; !ok {
-				fmt.Printf("Creating a queue named %s\n", comm.Data)
+				log.Printf("Creating a queue named %s\n", comm.Data)
 
 				server.queues[comm.Data] = queue.New()
 			}
@@ -105,4 +128,6 @@ func handle(server *Server, conn net.Conn) {
 		}
 		conn.Write(msg)
 	}
+
+	log.Println(conn.RemoteAddr(), "is done")
 }

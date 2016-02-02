@@ -27,11 +27,11 @@ func main() {
 	go server.Start()
 
 	// Creates a channel to watch for a syscall
-	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	// Wait for a syscall to stop the server
-	<-ch
+	<-quit
 
 	// stop the server
 	server.Stop()

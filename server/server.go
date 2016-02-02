@@ -1,11 +1,12 @@
 package server
 
 import (
-	"errors"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/diegoholiveira/bottle/command"
@@ -18,22 +19,22 @@ type Server struct {
 	address   *net.TCPAddr
 	waitGroup *sync.WaitGroup
 	queues    queues
-	listener  *net.TCPListener
+	quit      chan bool
 }
 
 func New(address string, port int) (*Server, error) {
-	ip := net.ParseIP(address)
-	if ip == nil {
-		return nil, errors.New("You must define a valid IP for Bottle")
+	p := strconv.Itoa(port)
+
+	ip, err := net.ResolveTCPAddr("tcp4", address+":"+p)
+	if err != nil {
+		return nil, err
 	}
 
 	server := &Server{
 		waitGroup: &sync.WaitGroup{},
-		address: &net.TCPAddr{
-			IP:   ip,
-			Port: port,
-		},
-		queues: make(queues),
+		address:   ip,
+		queues:    make(queues),
+		quit:      make(chan bool),
 	}
 
 	return server, nil
@@ -42,34 +43,45 @@ func New(address string, port int) (*Server, error) {
 func (server *Server) Start() {
 	log.Printf("Starting bottle at %s\n", server.address.String())
 
-	listener, err := net.ListenTCP("tcp", server.address)
+	listener, err := net.ListenTCP("tcp4", server.address)
 	if err != nil {
 		log.Println(err.Error())
-		log.Println("It's not possible to start bottle!")
 		os.Exit(1)
 	}
 
-	server.listener = listener
+	defer listener.Close()
+
+	// Define a timeout for listen new connections
+	listener.SetDeadline(time.Now().Add(5 * time.Second))
 
 	for {
-		// keep accepting new connections
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
+		select {
+		case <-server.quit:
+			return
+		default:
+			// keep accepting new connections
+			conn, err := listener.Accept()
+			if err != nil {
+				continue
+			}
+
+			log.Println(conn.RemoteAddr(), "connected")
+
+			// adds the new client to the wait group
+			server.waitGroup.Add(1)
+			// handle with the new client connection
+			go server.handle(conn)
 		}
-
-		log.Println(conn.RemoteAddr(), "connected")
-
-		// adds the new client to the wait group
-		server.waitGroup.Add(1)
-		// handle with the new client connection
-		go server.handle(conn)
 	}
 }
 
 func (server *Server) Stop() {
 	log.Println("Stopping the server...")
-	server.listener.Close()
+
+	// Stop listener for new connections
+	server.quit <- true
+
+	// Blocks the execution until all clients disconnect
 	server.waitGroup.Wait()
 }
 
